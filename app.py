@@ -144,8 +144,8 @@ def get_book(title):
         query("""
             MATCH (book:Book {title:$title})
             OPTIONAL MATCH (book)<-[r]-(author:Author)
-            RETURN book.title as title,
-            COLLECT([author.name, HEAD(SPLIT(TOLOWER(TYPE(r)), '_')), r.roles]) AS authors
+            RETURN book,
+            COLLECT([author.name, author.job, r.role]) AS authors
             LIMIT 1
         """),
         title=title,
@@ -153,15 +153,21 @@ def get_book(title):
         routing_="r",
         result_transformer_=neo4j.Result.single,
     )
+    
     if not result:
         return Response(dumps({"error": "Book not found"}), status=404,
-                        mimetype="application/json")
+                      mimetype="application/json")
 
-    return Response(dumps({"title": result["title"],
-                           "authors": [serialize_author(member)
-                                       for member in result["authors"]]}),
-                    mimetype="application/json")
-
+    book = result["book"]
+    return Response(dumps({
+        "title": book["title"],
+        "summary": book.get("summary", ""),
+        "genre": book.get("genre", ""),
+        "released": book.get("released", ""),
+        "rated": book.get("rated", ""),
+        "tagline": book.get("tagline", ""),
+        "authors": [serialize_author(member) for member in result["authors"]]
+    }), mimetype="application/json")
 
 @app.route("/book/<title>/vote", methods=["POST"])
 def vote_in_book(title):
@@ -321,51 +327,93 @@ def create_data(driver):
 
 @app.route("/books", methods=["GET"])
 def get_books():
-    def get_books_tx(tx):
-        result = tx.run("""
-            MATCH (b:Book)
-            RETURN b.title AS title
-            ORDER BY b.title
-        """)
-        return [record["title"] for record in result]
+    records, _, _ = driver.execute_query(
+        """
+        MATCH (b:Book)
+        RETURN b.title AS title
+        ORDER BY b.title
+        """,
+        database_=database,
+    )
     
-    with driver.session() as session:
-        books = session.execute_read(get_books_tx)
-        return Response(dumps(books), mimetype="application/json")
+    books = [record["title"] for record in records]
+    return Response(dumps(books), mimetype="application/json")
 
+
+@app.route("/authors", methods=["GET"])
+def get_authors():
+    records, _, _ = driver.execute_query(
+        """
+        MATCH (a:Author)
+        RETURN a.name AS name, a.job AS job
+        ORDER BY a.name
+        """,
+        database_=database,
+    )
+    
+    authors = [{"name": record["name"], "job": record["job"]} for record in records]
+    return Response(dumps(authors), mimetype="application/json")
+
+@app.route("/write", methods=["POST"])
+def create_wrote_relationship():
+    try:
+        data = request.json
+        
+        records, _, _ = driver.execute_query(
+            """
+            MATCH (a:Author {name: $authorName})
+            MATCH (b:Book {title: $bookTitle})
+            CREATE (a)-[r:WROTE {role: $role}]->(b)
+            RETURN a, b, r
+            """,
+            data,
+            database_=database,
+        )
+        
+        return Response(dumps({"message": "Relationship created successfully"}), 
+                       mimetype="application/json")
+    except Exception as e:
+        return Response(dumps({"error": str(e)}), 
+                       status=400, 
+                       mimetype="application/json")
+    
 @app.route("/author", methods=["POST"])
 def create_author():
-    data = request.json
-    
-    def create_author_tx(tx, data):
-        # Create author
-        result = tx.run("""
-            CREATE (a:Author {
-                name: $name,
-                job: $job,
-                bio: $bio
-            })
-            RETURN a
-        """, data)
-        
-        # If a book is specified, create the relationship
-        if data.get('linkToBook'):
-            tx.run("""
-                MATCH (a:Author {name: $name})
-                MATCH (b:Book {title: $linkToBook})
-                CREATE (a)-[:WROTE {role: $role}]->(b)
-            """, data)
-        
-        return result.single()
-    
     try:
+        data = request.json
+        print("Received author data:", data)  # Debug log
+
+        def create_author_tx(tx, author_data):
+            # Create author
+            result = tx.run("""
+                CREATE (a:Author {
+                    name: $name,
+                    job: $job,
+                    bio: $bio
+                })
+                RETURN a
+            """, author_data)
+            
+            # If a book is specified, create the relationship
+            if author_data.get('linkToBook'):
+                print(f"Creating relationship with book: {author_data['linkToBook']}")  # Debug log
+                tx.run("""
+                    MATCH (a:Author {name: $name})
+                    MATCH (b:Book {title: $linkToBook})
+                    CREATE (a)-[:WROTE {role: $role}]->(b)
+                """, author_data)
+            
+            return result.single()
+
         with driver.session() as session:
-            session.execute_write(create_author_tx, data)
-            return Response(dumps({"message": "Author created successfully"}), mimetype="application/json")
+            result = session.execute_write(create_author_tx, data)
+            return Response(dumps({"message": "Author created successfully"}), 
+                          mimetype="application/json")
     except Exception as e:
-        return Response(dumps({"error": str(e)}), status=400, mimetype="application/json")
-
-
+        print("Error creating author:", str(e))  # Debug log
+        return Response(dumps({"error": str(e)}), 
+                       status=400, 
+                       mimetype="application/json")
 if __name__ == "__main__":
     logging.root.setLevel(logging.INFO)
     logging.info("Starting on port %d, database is at %s", port, url)
