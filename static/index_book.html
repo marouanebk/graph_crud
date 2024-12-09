@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet" />
+    <title>Neo4j Books</title>
+    <style>
+      body {
+        font-family: "Arial", sans-serif;
+        background-color: #f8f9fa;
+        margin: 0;
+        padding: 0;
+      }
+
+      #book-list {
+        max-height: 200px;
+        overflow-y: auto;
+        padding: 10px;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+
+      #graph {
+        height: 500px;
+        background-color: #ffffff;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        overflow: hidden;
+      }
+
+      .navbar {
+        margin-bottom: 20px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background-color: #ffffff;
+      }
+
+      .panel {
+        border: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+
+      .panel-heading {
+        font-weight: bold;
+        background-color: #007bff;
+        color: #ffffff;
+        padding: 10px;
+        border-bottom: 1px solid #ddd;
+      }
+
+      #add-book-form, #add-author-form {
+        padding: 20px;
+        background-color: #fff;
+        border-radius: 5px;
+      }
+
+      .node.author { fill: #4caf50; }
+      .node.book { fill: #ff5722; }
+      .link { stroke: #bbb; stroke-opacity: 0.6; }
+      .text { font-size: 12px; fill: #333; }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <div class="container">
+        <a class="navbar-brand" href="#">Book Management System</a>
+        <form class="d-flex" id="search">
+          <input class="form-control me-2" type="search" placeholder="Search for Book Title" name="search" />
+          <button class="btn btn-primary" type="submit">Search</button>
+        </form>
+      </div>
+    </nav>
+
+    <div class="container">
+      <!-- Add Book Form -->
+      <div class="panel">
+        <div class="panel-heading">Add New Book</div>
+        <form id="add-book-form">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="title" class="form-label">Title*</label>
+              <input type="text" class="form-control" id="title" name="title" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="genre" class="form-label">Genre</label>
+              <input type="text" class="form-control" id="genre" name="genre">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-12 mb-3">
+              <label for="summary" class="form-label">Summary</label>
+              <textarea class="form-control" id="summary" name="summary" rows="3"></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label for="released" class="form-label">Release Date</label>
+              <input type="date" class="form-control" id="released" name="released">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label for="rated" class="form-label">Rating</label>
+              <input type="text" class="form-control" id="rated" name="rated">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label for="tagline" class="form-label">Tagline</label>
+              <input type="text" class="form-control" id="tagline" name="tagline">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">Add Book</button>
+        </form>
+      </div>
+
+      <!-- Add Author Form -->
+      <div class="panel">
+        <div class="panel-heading">Add New Author</div>
+        <form id="add-author-form">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="authorName" class="form-label">Author Name*</label>
+              <input type="text" class="form-control" id="authorName" name="authorName" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="authorJob" class="form-label">Job/Role</label>
+              <input type="text" class="form-control" id="authorJob" name="authorJob" placeholder="e.g., Writer, Novelist">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-12 mb-3">
+              <label for="authorBio" class="form-label">Biography</label>
+              <textarea class="form-control" id="authorBio" name="authorBio" rows="3"></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-12 mb-3">
+              <label class="form-label">Link to Existing Book (Optional)</label>
+              <div class="input-group">
+                <select class="form-control" id="linkToBook">
+                  <option value="">Select a book to link (optional)</option>
+                </select>
+                <select class="form-control" id="authorRole">
+                  <option value="Author">Author</option>
+                  <option value="Co-Author">Co-Author</option>
+                  <option value="Editor">Editor</option>
+                  <option value="Contributor">Contributor</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">Add Author</button>
+        </form>
+      </div>
+
+      <div class="row">
+        <!-- Graph View -->
+        <div class="col-md-7 mb-3">
+          <div class="panel">
+            <div class="panel-heading">Book-Author Network</div>
+            <div id="graph"></div>
+          </div>
+        </div>
+        <!-- Search Results -->
+        <div class="col-md-5 mb-3">
+          <div class="panel">
+            <div class="panel-heading">Search Results</div>
+            <div id="book-list">
+              <ul id="results" class="list-group"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Book Details -->
+      <div class="panel">
+        <div class="panel-heading">Book Details</div>
+        <div class="row p-3">
+          <div class="col-md-8">
+            <h4 id="book-title"></h4>
+            <p id="book-summary"></p>
+            <div id="book-info">
+              <p><strong>Genre:</strong> <span id="book-genre"></span></p>
+              <p><strong>Released:</strong> <span id="book-released"></span></p>
+              <p><strong>Rating:</strong> <span id="book-rated"></span></p>
+            </div>
+            <h5>Authors</h5>
+            <ul id="authors" class="list-group"></ul>
+            <button id="vote" class="btn btn-primary mt-3">Vote for this book</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+    <script type="text/javascript">
+      $(function () {
+        // Show book details
+        function showBook(title) {
+          $.get("/book/" + encodeURIComponent(title), function (data) {
+            if (!data) return;
+            $("#book-title").text(data.title);
+            const $list = $("#authors").empty();
+            data.authors.forEach(function (author) {
+              $list.append(
+                $(`<li class="list-group-item">${author.name} - ${author.job}${
+                  author.role ? ` (${author.role})` : ''
+                }</li>`)
+              );
+            });
+            $("#vote").off("click").on("click", function () {
+              voteInBook(data.title);
+            });
+          });
+          return false;
+        }
+
+        // Search functionality
+        function search() {
+          const query = $("#search input[name=search]").val();
+          $.get("/search?q=" + encodeURIComponent(query), function (data) {
+            const t = $("#results").empty();
+            if (!data || data.length === 0) {
+              t.append('<li class="list-group-item">No results found</li>');
+              return;
+            }
+            data.forEach(function (book) {
+              $(`<li class="list-group-item">
+                  <h5>${book.title}</h5>
+                  <p class="mb-1">${book.summary || 'No summary available'}</p>
+                  <small>Genre: ${book.genre || 'N/A'}</small>
+                </li>`)
+                .appendTo(t)
+                .click(function () {
+                  showBook(book.title);
+                });
+            });
+          });
+          return false;
+        }
+
+        // Vote functionality
+        function voteInBook(title) {
+          $.post(`/book/${encodeURIComponent(title)}/vote`, function(response) {
+            alert('Vote recorded!');
+          });
+        }
+
+        // Add book functionality
+        $("#add-book-form").submit(function(e) {
+          e.preventDefault();
+          const formData = {
+            title: $("#title").val(),
+            summary: $("#summary").val(),
+            released: $("#released").val(),
+            genre: $("#genre").val(),
+            rated: $("#rated").val(),
+            tagline: $("#tagline").val()
+          };
+
+          $.ajax({
+            url: '/book',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+              alert('Book added successfully!');
+              $("#add-book-form")[0].reset();
+              search();
+            },
+            error: function(xhr) {
+              alert('Error adding book: ' + xhr.responseJSON.error);
+            }
+          });
+        });
+
+        // Function to load books into the select dropdown
+        function loadBooksForSelect() {
+          $.get("/books", function(data) {
+            const select = $("#linkToBook").empty();
+            select.append('<option value="">Select a book to link (optional)</option>');
+            data.forEach(function(book) {
+              select.append(`<option value="${book.title}">${book.title}</option>`);
+            });
+          });
+        }
+
+        // Add author functionality
+        $("#add-author-form").submit(function(e) {
+          e.preventDefault();
+          const formData = {
+            name: $("#authorName").val(),
+            job: $("#authorJob").val(),
+            bio: $("#authorBio").val(),
+            linkToBook: $("#linkToBook").val(),
+            role: $("#authorRole").val()
+          };
+
+          $.ajax({
+            url: '/author',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+              alert('Author added successfully!');
+              $("#add-author-form")[0].reset();
+              // Refresh the graph
+              d3.select("#graph svg").remove();
+              d3.json("/graph", updateGraph);
+            },
+            error: function(xhr) {
+              alert('Error adding author: ' + xhr.responseJSON.error);
+            }
+          });
+        });
+
+        // Load books when page loads
+        loadBooksForSelect();
+
+        // Refresh books list when a new book is added
+        $("#add-book-form").on("submit", function() {
+          setTimeout(loadBooksForSelect, 1000); // Refresh after successful book addition
+        });
+
+        // Graph visualization
+        const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+        const width = 600 - margin.left - margin.right;
+        const height = 400 - margin.top - margin.bottom;
+
+        const force = d3.layout.force()
+            .charge(-300)
+            .linkDistance(100)
+            .gravity(0.1)
+            .size([width, height]);
+
+        d3.select("#graph svg").remove();
+
+        const svg = d3.select("#graph")
+            .append("svg")
+            .attr("width", "100%")
+            .attr("height", "100%")
+            .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        const zoom = d3.behavior.zoom()
+            .scaleExtent([0.1, 3])
+            .on("zoom", zoomed);
+
+        svg.call(zoom);
+
+        function zoomed() {
+            svg.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+        }
+
+        d3.json("/graph", function (error, graph) {
+          if (error) return;
+
+          force.nodes(graph.nodes)
+               .links(graph.links)
+               .start();
+
+          svg.append("defs").selectAll("marker")
+              .data(["end"])
+              .enter().append("marker")
+              .attr("id", "arrow")
+              .attr("viewBox", "0 -5 10 10")
+              .attr("refX", 20)
+              .attr("refY", 0)
+              .attr("markerWidth", 6)
+              .attr("markerHeight", 6)
+              .attr("orient", "auto")
+              .append("path")
+              .attr("d", "M0,-5L10,0L0,5")
+              .attr("fill", "#999");
+
+          const link = svg.selectAll(".link")
+              .data(graph.links)
+              .enter()
+              .append("line")
+              .attr("class", "link")
+              .attr("marker-end", "url(#arrow)")
+              .style("stroke-width", 2);
+
+          const node = svg.selectAll(".node")
+              .data(graph.nodes)
+              .enter()
+              .append("g")
+              .attr("class", "node")
+              .call(force.drag);
+
+          node.append("circle")
+              .attr("class", d => d.label)
+              .attr("r", 12)
+              .style("fill", d => d.label === "book" ? "#ff5722" : "#4caf50");
+
+          node.append("text")
+              .attr("dx", 15)
+              .attr("dy", ".35em")
+              .text(d => d.title)
+              .style("font-size", "12px")
+              .style("fill", "#333");
+
+          const linkText = svg.selectAll(".link-text")
+              .data(graph.links)
+              .enter()
+              .append("text")
+              .attr("class", "link-text")
+              .attr("dy", -5)
+              .append("textPath")
+              .attr("xlink:href", (d, i) => "#link" + i)
+              .style("text-anchor", "middle")
+              .attr("startOffset", "50%")
+              .text("WROTE")
+              .style("font-size", "10px")
+              .style("fill", "#666");
+
+          force.on("tick", () => {
+              link.attr("x1", d => d.source.x)
+                  .attr("y1", d => d.source.y)
+                  .attr("x2", d => d.target.x)
+                  .attr("y2", d => d.target.y);
+
+              node.attr("transform", d => `translate(${d.x},${d.y})`);
+
+              linkText.attr("x", d => (d.source.x + d.target.x) / 2)
+                      .attr("y", d => (d.source.y + d.target.y) / 2);
+          });
+        });
+
+        const styles = `
+            .link {
+                stroke: #999;
+                stroke-opacity: 0.6;
+            }
+            .node circle {
+                stroke: #fff;
+                stroke-width: 2px;
+            }
+            .node text {
+                pointer-events: none;
+            }
+            .link-text {
+                font-size: 10px;
+                fill: #666;
+            }
+        `;
+
+        const styleSheet = document.createElement("style");
+        styleSheet.type = "text/css";
+        styleSheet.innerText = styles;
+        document.head.appendChild(styleSheet);
+
+        // Initialize search on page load
+        $("#search").submit(search);
+        search();
+      });
+    </script>
+  </body>
+</html>

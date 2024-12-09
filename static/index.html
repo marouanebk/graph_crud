@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
+      rel="stylesheet" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+      rel="stylesheet" />
+    <title>Neo4j Movies</title>
+    <style>
+      body {
+        font-family: "Arial", sans-serif;
+        background-color: #f8f9fa;
+        margin: 0;
+        padding: 0;
+      }
+
+      /* Scrollable container for movie list */
+      #movie-list {
+        max-height: 200px;
+        overflow-y: auto;
+        padding: 10px;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+
+      #graph {
+        height: 400px;
+        background-color: #ffffff;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+
+      .navbar {
+        margin-bottom: 20px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background-color: #ffffff;
+      }
+
+      .navbar .form-inline {
+        margin: 0 auto;
+        max-width: 600px;
+      }
+
+      .panel {
+        border: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .panel-heading {
+        font-weight: bold;
+        background-color: #007bff;
+        color: #ffffff;
+        padding: 10px;
+        border-bottom: 1px solid #ddd;
+      }
+
+      .table-hover tbody tr:hover {
+        background-color: #f1f1f1;
+        cursor: pointer;
+      }
+
+      #search input {
+        max-width: 300px;
+        margin-right: 10px;
+      }
+
+      #vote {
+        background-color: #007bff;
+        color: #fff;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+      }
+
+      #vote:hover {
+        background-color: #0056b3;
+      }
+
+      .node {
+        stroke: #333;
+        stroke-width: 1.5px;
+      }
+
+      .node.actor {
+        fill: #4caf50;
+      }
+
+      .node.movie {
+        fill: #ff5722;
+      }
+
+      .link {
+        stroke: #bbb;
+        stroke-opacity: 0.6;
+      }
+
+      #results {
+        max-height: 300px;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <div class="container">
+        <a class="navbar-brand" href="https://neo4j.com/developer/get-started">
+          <img
+            src="https://neo4j-documentation.github.io/developer-resources/language-guides/assets/img/logo-white.svg"
+            alt="Neo4j Logo"
+            style="height: 30px" />
+        </a>
+        <form class="d-flex" id="search">
+          <input
+            class="form-control me-2"
+            type="search"
+            placeholder="Search for Movie Title"
+            aria-label="Search"
+            name="search" />
+          <button class="btn btn-primary" type="submit">Search</button>
+        </form>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="row">
+        <div class="col-md-7 mb-3">
+          <div id="graph"></div>
+        </div>
+        <div class="col-md-5 mb-3">
+          <div class="panel">
+            <div class="panel-heading">Search Results</div>
+            <div id="movie-list">
+              <ul id="results"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-12">
+          <div class="panel">
+            <div class="panel-heading" id="title">
+              <div style="max-height: 200px; overflow-y: auto">Details</div>
+            </div>
+            <div class="row">
+              <div class="col-md-4">
+                <img
+                  src=""
+                  class="img-fluid rounded"
+                  id="poster"
+                  alt="Poster" />
+              </div>
+              <div class="col-md-8">
+                <h5>Crew</h5>
+                <ul id="crew"></ul>
+              </div>
+            </div>  
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+    <script type="text/javascript">
+      $(function () {
+        function showMovie(title) { 
+          $.get(
+            "/movie/" + encodeURIComponent(title),
+            function (data) {
+              if (!data) return;
+              $("#title").text(data.title);
+              $("#poster").attr(
+                "src",
+                "https://neo4j-documentation.github.io/developer-resources/language-guides/assets/posters/" +
+                  encodeURIComponent(data.title) +
+                  ".jpg"
+              );
+              const $list = $("#crew").empty();
+              data.cast.forEach(function (cast) {
+                $list.append(
+                  $(
+                    `<li>${cast.name} ${cast.job}${
+                      cast.job === "acted" ? " as " + cast.role : ""
+                    }</li>`
+                  )
+                );
+              });
+              $("#vote")
+                .off("click")
+                .on("click", function () {
+                  voteInMovie(data.title);
+                });
+            },
+            "json"
+          );
+          return false;
+        }
+
+        function search(showFirst = true) {
+          const query = $("#search").find("input[name=search]").val();
+          $.get(
+            "/search?q=" + encodeURIComponent(query),
+            function (data) {
+              const t = $("#results").empty();
+              if (!data || data.length === 0) return;
+              data.forEach(function (movie, index) {
+                $(`<li class='movie-item'><a href="#">${movie.title}</a></li>`)
+                  .appendTo(t)
+                  .click(function () {
+                    showMovie($(this).text());
+                  });
+              });
+              if (showFirst) {
+                showMovie(data[0].title);
+              }
+            },
+            "json"
+          );
+          return false;
+        }
+
+        function voteInMovie(title) {
+          $.post(`/movie/${encodeURIComponent(title)}/vote`, () => {
+            search(false);
+            showMovie(title);
+          });
+        }
+
+        $("#search").submit(search);
+        search();
+      });
+
+      const width = 800,
+        height = 800;
+      const force = d3.layout
+        .force()
+        .charge(-200)
+        .linkDistance(30)
+        .size([width, height]);
+      const svg = d3
+        .select("#graph")
+        .append("svg")
+        .attr("width", "100%")
+        .attr("height", "100%")
+        .attr("pointer-events", "all");
+      d3.json("/graph", function (error, graph) {
+        if (error) return;
+        force.nodes(graph.nodes).links(graph.links).start();
+        const link = svg
+          .selectAll(".link")
+          .data(graph.links)
+          .enter()
+          .append("line")
+          .attr("class", "link");
+        const node = svg
+          .selectAll(".node")
+          .data(graph.nodes)
+          .enter()
+          .append("circle")
+          .attr("class", (d) => `node ${d.label}`)
+          .attr("r", 10)
+          .call(force.drag);
+        node.append("title").text((d) => d.title);
+        force.on("tick", () => {
+          link
+            .attr("x1", (d) => d.source.x)
+            .attr("y1", (d) => d.source.y)
+            .attr("x2", (d) => d.target.x)
+            .attr("y2", (d) => d.target.y);
+          node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
+        });
+      });
+    </script>
+  </body>
+</html>
