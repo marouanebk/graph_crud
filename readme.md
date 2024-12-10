@@ -12,8 +12,8 @@ This project is a simple CRUD (Create, Read, Update, Delete) application built u
 1. **Clone the repository:**
 
     ```sh
-    git clone <repository-url>
-    cd <repository-directory>
+    git clone https://github.com/marouanebk/graph_crud
+    cd graph_crud
     ```
 
 2. **Create a virtual environment:**
