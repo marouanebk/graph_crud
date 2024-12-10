@@ -13,10 +13,10 @@ from typing_extensions import LiteralString
 app = Flask(__name__, static_url_path="/static/")
 
 url = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-username = os.getenv("NEO4J_USER", "neo4j")
-password = os.getenv("NEO4J_PASSWORD", "password123")
+username = os.getenv("NEO4J_USER", "USERNAME")
+password = os.getenv("NEO4J_PASSWORD", "PASSWORD")
 # neo4j_version = os.getenv("NEO4J_VERSION", "4")
-database = os.getenv("NEO4J_DATABASE", "neo4j")
+database = os.getenv("NEO4J_DATABASE", "DATABASE")
 
 port = int(os.getenv("PORT", 8080))
 
