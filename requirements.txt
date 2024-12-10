@@ -1,4 +1,12 @@
-# common requirements for sync and async example
-neo4j==5.26.0
-
-typing_extensions==4.12.2
+blinker==1.9.0
+click==8.1.7
+flask==3.1.0
+importlib-metadata==8.5.0
+itsdangerous==2.2.0
+jinja2==3.1.4
+MarkupSafe==3.0.2
+neo4j==5.14.1
+pytz==2024.2
+typing-extensions==4.12.2
+werkzeug==3.1.3
+zipp==3.21.0
